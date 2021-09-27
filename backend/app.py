@@ -1,50 +1,41 @@
+import logging
+
+import coloredlogs
 from faker import Faker
-from flask import Flask
+from flask import Flask, current_app
 from flask_cors import CORS
+from flask_migrate import Migrate
 
-from models import db, User, UsersResponse
+from blueprints.general import general
+from config import get_config
+from fixtures.fixtures import init
+from models import db
 
-fake = Faker()
+#if create app, then we need to access with context
+
+app = Flask(__name__)
+app.config.from_object(get_config())
+cors = CORS(app)
+logger = logging.getLogger(__name__)
+coloredlogs.install(level='DEBUG')
+db.init_app(app)
+migrate = Migrate(app, db)
 
 
-def create_app():
-    _app = Flask(__name__)
-    _app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///:memory:"
-    _app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-    db.init_app(_app)
-    with _app.app_context():
+# TODO 
+# populate  on first request
+@app.before_first_request
+def create_users():
+    if app.config['DATABASE_DROP_CREATE_ALL']:
+        logger.info('App database\'s tables will be recreated')
         db.drop_all()
         db.create_all()
-    return _app
+    if app.config['POPULATE_WITH_FIXTURES']:
+        logger.info(f'App database\'s tables will be populated with fake data')
+        init(db, current_app.config)
 
-
-app = create_app()
-
-CORS(app)
-
-@app.route("/users", methods=["POST"])
-def create_users_batch():
-    with app.app_context():
-        for x in range(10):
-            db.session.add(User(name=fake.name()))
-        db.session.commit()
-    return "Users created", 201
-
-
-@app.route("/users", methods=["DELETE"])
-def delete_all_users():
-    with app.app_context():
-        User.query.delete()
-        db.session.commit()
-    return "Users deleted"
-
-
-@app.route("/users", methods=["GET"])
-def users():
-    with app.app_context():
-        results = User.query.all()
-    return UsersResponse(items=results).json()
-
+app.register_blueprint(general, url_prefix=f'{app.config["APPLICATION_ROOT"]}/')
 
 if __name__ == "__main__":
-    app.run()
+    app.run(host='0.0.0.0', port=8000)
+

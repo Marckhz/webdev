@@ -39,3 +39,9 @@
 .users-actions > button:hover {
   background-color: #042c55;
 }
+
+.container-dropdown {
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+}
